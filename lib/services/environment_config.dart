@@ -19,7 +19,7 @@ class EnvironmentConfig {
   static const String _firebaseMessagingSenderId = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID', defaultValue: '937741022651');
   static const String _firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID', defaultValue: '1:937741022651:web:cf181d053f178c9298c09e');
   
-  // Stripe Configuration
+  // Stripe Configuration - Production Live Keys
   static const String _stripePublishableKey = String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
   static const String _stripeSecretKey = String.fromEnvironment('STRIPE_SECRET_KEY', defaultValue: '');
   static const String _stripePremiumPriceId = String.fromEnvironment('STRIPE_PREMIUM_PRICE_ID', defaultValue: '');

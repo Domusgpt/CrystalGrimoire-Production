@@ -13,6 +13,7 @@ import 'services/storage_service.dart';
 import 'services/collection_service_v2.dart';
 import 'services/unified_ai_service.dart';
 import 'services/firebase_service.dart';
+import 'services/stripe_service.dart';
 import 'firebase_options.dart';
 
 // Screens
@@ -80,6 +81,13 @@ class CrystalGrimoireApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppState()),
         Provider(create: (_) => StorageService()),
         Provider(create: (_) => FirebaseService()),
+        ProxyProvider<FirebaseService, StripeService>(
+          create: (context) => StripeService(
+            firebaseService: context.read<FirebaseService>(),
+          ),
+          update: (context, firebase, previous) => 
+            previous ?? StripeService(firebaseService: firebase),
+        ),
         ChangeNotifierProvider(create: (_) => CollectionServiceV2()..initialize()),
         ChangeNotifierProxyProvider2<StorageService, CollectionServiceV2, UnifiedAIService>(
           create: (context) => UnifiedAIService(
