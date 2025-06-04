@@ -1,0 +1,53 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Firebase
+firebase-credentials.json
+.firebase/
+firebase-debug.log
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Python
+backend/venv/
+backend/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+*.swo
+
+# Temporary files
+temp/
+*.tmp
+
+# Secrets
+*.pem
+*.key
+*.cert

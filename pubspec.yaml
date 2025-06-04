@@ -1,0 +1,101 @@
+name: crystal_grimoire
+description: "🔮 Your mystical crystal identification and spiritual guidance companion"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: ">=3.32.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Core dependencies
+  cupertino_icons: ^1.0.6
+  http: ^1.1.0
+  
+  # Image handling
+  image_picker: ^1.0.4
+  image: ^4.1.3
+  
+  # Storage & persistence
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
+  sqflite: ^2.3.0
+  
+  # State management
+  provider: ^6.1.1
+  
+  # UI enhancements
+  flutter_staggered_animations: ^1.1.1
+  shimmer: ^3.0.0
+  lottie: ^2.7.0
+  google_fonts: ^6.1.0
+  
+  # Media
+  video_player: ^2.8.1
+  
+  # Utilities
+  uuid: ^4.1.0
+  crypto: ^3.0.3
+  intl: ^0.18.1
+  
+  # Camera
+  camera: ^0.10.5+5
+  
+  # Authentication - Updated versions
+  firebase_core: ^3.13.1
+  firebase_auth: ^5.5.4
+  google_sign_in: ^6.1.6
+  sign_in_with_apple: ^5.0.0
+  
+  # Payments & Subscriptions
+  purchases_flutter: ^6.21.0  # RevenueCat
+  
+  # Ads
+  google_mobile_ads: ^4.0.0
+  
+  # Cloud Storage - Updated versions
+  cloud_firestore: ^5.6.8
+  firebase_storage: ^12.4.6
+  
+  # Platform Detection
+  universal_platform: ^1.0.0+1
+  
+  # Deep Links (Firebase Dynamic Links is deprecated)
+  # firebase_dynamic_links: ^5.4.8
+  uni_links: ^0.5.1
+  
+  # Audio & Recording
+  audioplayers: ^6.0.0
+  record: ^5.0.4
+  permission_handler: ^11.4.0
+  
+  # UI Utilities
+  flutter_colorpicker: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/images/crystals/
+    - assets/animations/
+    - assets/icons/
+    - assets/videos/
+    - assets/sounds/
+    - assets/sounds/nature/
+    - assets/sounds/guided/
+  
+  # fonts:
+  #   - family: Mystical
+  #     fonts:
+  #       - asset: assets/fonts/Cinzel-Regular.ttf
+  #       - asset: assets/fonts/Cinzel-Bold.ttf
+  #         weight: 700
