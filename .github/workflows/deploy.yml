@@ -23,7 +23,11 @@ jobs:
       run: flutter pub get
     
     - name: Build web app
-      run: flutter build web --release --base-href="/CrystalGrimoire-Production/"
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+      run: flutter build web --release --base-href="/CrystalGrimoire-Production/" --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY --dart-define=STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_KEY
     
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3

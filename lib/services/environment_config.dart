@@ -1,12 +1,14 @@
 /// Environment Configuration for Crystal Grimoire Beta0.2
 /// Manages API keys, endpoints, and environment settings
+/// SECURITY: All API keys are loaded from environment variables only
 class EnvironmentConfig {
   static const bool _isProduction = bool.fromEnvironment('PRODUCTION', defaultValue: false);
   
-  // API Keys - these should be set as environment variables or build configurations
+  // API Keys - NEVER hardcode keys in source code
+  // Use environment variables or GitHub Secrets for production
   static const String _openAIApiKey = String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
   static const String _claudeApiKey = String.fromEnvironment('CLAUDE_API_KEY', defaultValue: '');
-  static const String _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: 'AIzaSyC__1EHCjv9pCRJzQoRQiKVxTfaPMXFXAs');
+  static const String _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
   static const String _horoscopeApiKey = String.fromEnvironment('HOROSCOPE_API_KEY', defaultValue: '');
   
   // Firebase Configuration
