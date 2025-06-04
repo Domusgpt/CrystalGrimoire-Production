@@ -11,11 +11,13 @@ class EnvironmentConfig {
   static const String _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
   static const String _horoscopeApiKey = String.fromEnvironment('HOROSCOPE_API_KEY', defaultValue: '');
   
-  // Firebase Configuration
+  // Firebase Configuration - Production values
   static const String _firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY', defaultValue: '');
-  static const String _firebaseProjectId = String.fromEnvironment('FIREBASE_PROJECT_ID', defaultValue: 'crystal-grimoire-beta');
-  static const String _firebaseAuthDomain = String.fromEnvironment('FIREBASE_AUTH_DOMAIN', defaultValue: 'crystal-grimoire-beta.firebaseapp.com');
-  static const String _firebaseStorageBucket = String.fromEnvironment('FIREBASE_STORAGE_BUCKET', defaultValue: 'crystal-grimoire-beta.appspot.com');
+  static const String _firebaseProjectId = String.fromEnvironment('FIREBASE_PROJECT_ID', defaultValue: 'crystalgrimoire-production');
+  static const String _firebaseAuthDomain = String.fromEnvironment('FIREBASE_AUTH_DOMAIN', defaultValue: 'crystalgrimoire-production.firebaseapp.com');
+  static const String _firebaseStorageBucket = String.fromEnvironment('FIREBASE_STORAGE_BUCKET', defaultValue: 'crystalgrimoire-production.firebasestorage.app');
+  static const String _firebaseMessagingSenderId = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID', defaultValue: '937741022651');
+  static const String _firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID', defaultValue: '1:937741022651:web:cf181d053f178c9298c09e');
   
   // Stripe Configuration
   static const String _stripePublishableKey = String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
@@ -38,6 +40,8 @@ class EnvironmentConfig {
   String get firebaseProjectId => _firebaseProjectId;
   String get firebaseAuthDomain => _firebaseAuthDomain;
   String get firebaseStorageBucket => _firebaseStorageBucket;
+  String get firebaseMessagingSenderId => _firebaseMessagingSenderId;
+  String get firebaseAppId => _firebaseAppId;
   
   // Stripe Configuration
   String get stripePublishableKey => _stripePublishableKey;

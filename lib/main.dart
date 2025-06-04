@@ -12,6 +12,7 @@ import 'services/ads_service.dart';
 import 'services/storage_service.dart';
 import 'services/collection_service_v2.dart';
 import 'services/unified_ai_service.dart';
+import 'services/firebase_service.dart';
 import 'firebase_options.dart';
 
 // Screens
@@ -78,6 +79,7 @@ class CrystalGrimoireApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AppState()),
         Provider(create: (_) => StorageService()),
+        Provider(create: (_) => FirebaseService()),
         ChangeNotifierProvider(create: (_) => CollectionServiceV2()..initialize()),
         ChangeNotifierProxyProvider2<StorageService, CollectionServiceV2, UnifiedAIService>(
           create: (context) => UnifiedAIService(
