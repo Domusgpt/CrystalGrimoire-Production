@@ -21,6 +21,8 @@ from firebase_admin import credentials, firestore, auth
 from enum import Enum
 import hashlib
 import base64
+import uuid # Import uuid
+import asyncio # Import asyncio
 
 # Configure logging
 logging.basicConfig(
@@ -106,6 +108,20 @@ class PersonalizedGuidanceRequest(BaseModel):
 class HoroscopeRequest(BaseModel):
     zodiac_sign: str
     horoscope_type: str = "daily"  # daily, weekly, monthly
+
+class SaveCrystalRequest(BaseModel):
+    identification_id: str
+    identified_at: datetime # Assuming this comes as a valid ISO datetime string and Pydantic handles parsing
+    name: str
+    variant_or_specific_name: Optional[str] = None
+    main_color: Optional[str] = None
+    brief_description: Optional[str] = None
+    crystal_details: Dict[str, Any] # This would be the 'crystal_details' object from identify response
+    raw_llm_response: str
+    user_context_at_identification: Optional[Dict[str, Any]] = None # e.g., mood, intent
+    source: Optional[str] = "llm_identification" # e.g., 'manual_entry', 'legacy_import'
+    api_version: Optional[str] = Field(default_factory=lambda: app.version) # Default to current app version
+    user_notes: Optional[str] = None # User's personal notes about this crystal
 
 # ===== SERVICES =====
 class FirebaseService:
@@ -432,11 +448,74 @@ async def identify_crystal(
     # Update usage
     await firebase_service.update_user_usage(user.id, "crystal_identifications")
     
-    return {
-        "success": True,
-        "identification": response,
-        "usage_remaining": _calculate_remaining_usage(user.subscription_tier)
-    }
+    identification_id = str(uuid.uuid4())
+
+    # Attempt to parse the LLM response for structured data
+    # This is a simplified example. Real parsing would need more robust logic
+    # based on the expected output format of the LLM.
+    crystal_details = None
+    try:
+        # Example: Assuming LLM returns "Name: Amethyst\nDescription: Powerful stone..."
+        lines = response.split('\n')
+        parsed_name = "Unknown Crystal"
+        parsed_description = response # Default to full response
+        parsed_properties = []
+        parsed_chakras = []
+        parsed_healing = []
+
+        for line in lines:
+            if line.lower().startswith("crystal name:"):
+                parsed_name = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("name:"):
+                parsed_name = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("description:"):
+                parsed_description = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("metaphysical properties:"):
+                parsed_properties = [p.strip() for p in line.split(":", 1)[1].split(",")]
+            elif line.lower().startswith("chakras:"):
+                parsed_chakras = [c.strip() for c in line.split(":", 1)[1].split(",")]
+            elif line.lower().startswith("healing applications:"):
+                parsed_healing = [h.strip() for h in line.split(":", 1)[1].split(",")]
+
+        # If a name was found (even if it's the first line of the response if not explicitly labeled)
+        if parsed_name == "Unknown Crystal" and lines:
+             first_line = lines[0].strip()
+             # Avoid using overly long first lines as name
+             if len(first_line) < 100: parsed_name = first_line
+
+
+        # Only create crystal_details if a name was somewhat parsed or explicitly found
+        if parsed_name != "Unknown Crystal" or parsed_properties or parsed_chakras or parsed_healing:
+            crystal_details = {
+                "name": parsed_name,
+                "description": parsed_description if parsed_description != response else (lines[1] if len(lines) > 1 and parsed_name == lines[0].strip() else response),
+                "properties": parsed_properties,
+                "chakras": parsed_chakras,
+                "healing_applications": parsed_healing,
+                # Add other fields as they are reliably parsed
+            }
+
+    except Exception as e:
+        logger.error(f"Error parsing LLM response for structured data: {e}")
+        # crystal_details remains None
+
+    if crystal_details:
+        return {
+            "success": True,
+            "identification_raw": response,
+            "crystal_details": crystal_details,
+            "identification_id": identification_id,
+            "usage_remaining": _calculate_remaining_usage(user.subscription_tier),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    else:
+        return {
+            "success": True,
+            "identification": response, # Fallback to old format
+            "identification_id": identification_id,
+            "usage_remaining": _calculate_remaining_usage(user.subscription_tier),
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 @app.post("/api/guidance/personalized")
 async def get_personalized_guidance(
@@ -498,6 +577,76 @@ async def get_horoscope(
         "personalized_for": user.name
     }
 
+# Crystal Collection Endpoints
+@app.get("/api/crystal/collection/{user_id}")
+async def get_user_crystal_collection(user_id: str, current_user: UserProfile = Depends(get_current_user)):
+    """Get user's crystal collection"""
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this collection")
+
+    if not firebase_service.db:
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    try:
+        collection_ref = firebase_service.db.collection('users').document(user_id).collection('saved_crystals')
+
+        # Synchronous function to fetch documents
+        def _get_docs_sync():
+            docs_stream = collection_ref.stream() # stream() returns an iterator
+            # Process documents, converting Firestore Timestamps in crystal_details if necessary
+            # For now, assuming Pydantic or FastAPI's default JSON encoder handles datetime objects from .to_dict()
+            return [doc.to_dict() for doc in docs_stream]
+
+        saved_crystals_data = await asyncio.to_thread(_get_docs_sync)
+
+        logger.info(f"Retrieved {len(saved_crystals_data)} crystals for user {user_id}")
+        return {
+            "success": True,
+            "user_id": user_id,
+            "collection": saved_crystals_data,
+            "count": len(saved_crystals_data)
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving collection for user {user_id}: {e}")
+        # Consider more specific error codes if possible, e.g., 404 if user doc not found,
+        # but generic 500 is okay for unexpected issues.
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve crystal collection: {str(e)}")
+
+@app.post("/api/crystal/save")
+async def save_crystal_to_collection(request: SaveCrystalRequest, current_user: UserProfile = Depends(get_current_user)):
+    """Save a crystal to the user's collection"""
+    user_id = current_user.id
+
+    if not firebase_service.db:
+        raise HTTPException(status_code=503, detail="Database service not available.")
+
+    try:
+        data_to_save = request.dict() # Pydantic model to dict
+        data_to_save['user_id'] = user_id
+        data_to_save['saved_at'] = datetime.utcnow()
+
+        # Ensure complex objects are suitable for Firestore (Pydantic usually handles this well)
+        # For example, datetime objects are fine. Enums should be stored as their value.
+        # If 'crystal_details' or 'user_context_at_identification' contain custom objects
+        # not directly serializable by Firestore, they might need preprocessing.
+        # However, standard dicts, lists, strings, numbers, datetimes are fine.
+
+        crystal_doc_ref = firebase_service.db.collection('users').document(user_id).collection('saved_crystals').document(request.identification_id)
+
+        # Firestore 'set' is synchronous, run in thread pool for async context
+        # For a single operation, direct call might be acceptable, but this is safer:
+        await asyncio.to_thread(crystal_doc_ref.set, data_to_save)
+
+        logger.info(f"Crystal {request.identification_id} saved for user {user_id}")
+        return {
+            "success": True,
+            "message": "Crystal saved to collection",
+            "saved_crystal_id": request.identification_id
+        }
+    except Exception as e:
+        logger.error(f"Error saving crystal {request.identification_id} for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save crystal: {str(e)}")
+
 @app.post("/api/subscription/checkout")
 async def create_subscription_checkout(
     tier: str,
@@ -546,4 +695,4 @@ def _calculate_remaining_usage(tier: SubscriptionTier) -> int:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=7888)

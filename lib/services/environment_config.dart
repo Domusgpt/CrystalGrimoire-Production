@@ -52,7 +52,7 @@ class EnvironmentConfig {
   // API Endpoints
   String get baseApiUrl => isProduction 
     ? 'https://api.crystalgrimoire.com'
-    : 'http://localhost:8080';
+    : 'http://localhost:7888';
     
   String get websiteUrl => isProduction
     ? 'https://crystalgrimoire.com'

@@ -24,20 +24,33 @@ class Crystal {
   final String name;
   final String scientificName;
   final String group;
-  final String description;
-  final List<String> metaphysicalProperties;
-  final List<String> healingProperties;
-  final List<String> chakras; // Changed to List<String> for compatibility
-  final List<String> elements; // Added elements field
-  final Map<String, dynamic> properties; // Added properties field
+  final String description; // This can be the longer, detailed description
+  final List<String> metaphysicalProperties; // Can be kept for general terms
+  final List<String> healingProperties; // Can be kept for general terms
+  final List<String> chakras;
+  final List<String> elements;
+  final Map<String, dynamic> properties; // General properties from crystal_details
   final String colorDescription;
   final String hardness;
   final String formation;
   final String careInstructions;
-  final DateTime? identificationDate;
+  final DateTime? identificationDate; // Renamed from identifiedAt to match existing field
   final List<String> imageUrls;
   final ConfidenceLevel? confidence;
   final String? userNotes;
+
+  // New fields for richer data model
+  final String? variantOrSpecificName;
+  final String? mainColor;
+  final String? briefDescription; // Shorter description
+  final DateTime? savedAt;
+  final List<String>? zodiacSigns;
+  final List<String>? planetaryInfluences;
+  final String? numerologyConnection;
+  final List<String>? healingApplications; // More specific than healingProperties
+  final String? crystalSystem;
+  final String? spiritualMessage;
+  final Map<String, dynamic>? crystalDetailsRaw; // Store the raw crystal_details from backend
 
   Crystal({
     required this.id,
@@ -58,6 +71,18 @@ class Crystal {
     this.imageUrls = const [],
     this.confidence,
     this.userNotes,
+    // New optional fields in constructor
+    this.variantOrSpecificName,
+    this.mainColor,
+    this.briefDescription,
+    this.savedAt,
+    this.zodiacSigns,
+    this.planetaryInfluences,
+    this.numerologyConnection,
+    this.healingApplications,
+    this.crystalSystem,
+    this.spiritualMessage,
+    this.crystalDetailsRaw,
   });
 
   factory Crystal.fromJson(Map<String, dynamic> json) {
@@ -77,13 +102,27 @@ class Crystal {
       formation: json['formation'] ?? '',
       careInstructions: json['careInstructions'] ?? '',
       identificationDate: json['identificationDate'] != null 
-          ? DateTime.parse(json['identificationDate']) 
+          ? DateTime.tryParse(json['identificationDate'])
           : null,
       imageUrls: List<String>.from(json['imageUrls'] ?? []),
       confidence: json['confidence'] != null 
           ? ConfidenceLevel.values.byName(json['confidence']) 
           : null,
       userNotes: json['userNotes'],
+      // New fields from JSON
+      variantOrSpecificName: json['variantOrSpecificName'],
+      mainColor: json['mainColor'],
+      briefDescription: json['briefDescription'],
+      savedAt: json['savedAt'] != null ? DateTime.tryParse(json['savedAt']) : null,
+      zodiacSigns: List<String>.from(json['zodiacSigns'] ?? []),
+      planetaryInfluences: List<String>.from(json['planetaryInfluences'] ?? []),
+      numerologyConnection: json['numerologyConnection'],
+      healingApplications: List<String>.from(json['healingApplications'] ?? []),
+      crystalSystem: json['crystalSystem'],
+      spiritualMessage: json['spiritualMessage'],
+      crystalDetailsRaw: json['crystalDetailsRaw'] != null
+          ? Map<String, dynamic>.from(json['crystalDetailsRaw'])
+          : null,
     );
   }
 
@@ -107,6 +146,18 @@ class Crystal {
       'imageUrls': imageUrls,
       'confidence': confidence?.name,
       'userNotes': userNotes,
+      // New fields for JSON
+      'variantOrSpecificName': variantOrSpecificName,
+      'mainColor': mainColor,
+      'briefDescription': briefDescription,
+      'savedAt': savedAt?.toIso8601String(),
+      'zodiacSigns': zodiacSigns,
+      'planetaryInfluences': planetaryInfluences,
+      'numerologyConnection': numerologyConnection,
+      'healingApplications': healingApplications,
+      'crystalSystem': crystalSystem,
+      'spiritualMessage': spiritualMessage,
+      'crystalDetailsRaw': crystalDetailsRaw,
     };
   }
 
@@ -129,6 +180,18 @@ class Crystal {
     List<String>? imageUrls,
     ConfidenceLevel? confidence,
     String? userNotes,
+    // New fields for copyWith
+    String? variantOrSpecificName,
+    String? mainColor,
+    String? briefDescription,
+    DateTime? savedAt,
+    List<String>? zodiacSigns,
+    List<String>? planetaryInfluences,
+    String? numerologyConnection,
+    List<String>? healingApplications,
+    String? crystalSystem,
+    String? spiritualMessage,
+    Map<String, dynamic>? crystalDetailsRaw,
   }) {
     return Crystal(
       id: id ?? this.id,
@@ -149,6 +212,18 @@ class Crystal {
       imageUrls: imageUrls ?? this.imageUrls,
       confidence: confidence ?? this.confidence,
       userNotes: userNotes ?? this.userNotes,
+      // New fields
+      variantOrSpecificName: variantOrSpecificName ?? this.variantOrSpecificName,
+      mainColor: mainColor ?? this.mainColor,
+      briefDescription: briefDescription ?? this.briefDescription,
+      savedAt: savedAt ?? this.savedAt,
+      zodiacSigns: zodiacSigns ?? this.zodiacSigns,
+      planetaryInfluences: planetaryInfluences ?? this.planetaryInfluences,
+      numerologyConnection: numerologyConnection ?? this.numerologyConnection,
+      healingApplications: healingApplications ?? this.healingApplications,
+      crystalSystem: crystalSystem ?? this.crystalSystem,
+      spiritualMessage: spiritualMessage ?? this.spiritualMessage,
+      crystalDetailsRaw: crystalDetailsRaw ?? this.crystalDetailsRaw,
     );
   }
 }
