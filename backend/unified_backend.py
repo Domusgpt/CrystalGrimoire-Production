@@ -21,6 +21,7 @@ from firebase_admin import credentials, firestore, auth
 from enum import Enum
 import hashlib
 import base64
+import uuid # Import uuid
 
 # Configure logging
 logging.basicConfig(
@@ -432,11 +433,74 @@ async def identify_crystal(
     # Update usage
     await firebase_service.update_user_usage(user.id, "crystal_identifications")
     
-    return {
-        "success": True,
-        "identification": response,
-        "usage_remaining": _calculate_remaining_usage(user.subscription_tier)
-    }
+    identification_id = str(uuid.uuid4())
+
+    # Attempt to parse the LLM response for structured data
+    # This is a simplified example. Real parsing would need more robust logic
+    # based on the expected output format of the LLM.
+    crystal_details = None
+    try:
+        # Example: Assuming LLM returns "Name: Amethyst\nDescription: Powerful stone..."
+        lines = response.split('\n')
+        parsed_name = "Unknown Crystal"
+        parsed_description = response # Default to full response
+        parsed_properties = []
+        parsed_chakras = []
+        parsed_healing = []
+
+        for line in lines:
+            if line.lower().startswith("crystal name:"):
+                parsed_name = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("name:"):
+                parsed_name = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("description:"):
+                parsed_description = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("metaphysical properties:"):
+                parsed_properties = [p.strip() for p in line.split(":", 1)[1].split(",")]
+            elif line.lower().startswith("chakras:"):
+                parsed_chakras = [c.strip() for c in line.split(":", 1)[1].split(",")]
+            elif line.lower().startswith("healing applications:"):
+                parsed_healing = [h.strip() for h in line.split(":", 1)[1].split(",")]
+
+        # If a name was found (even if it's the first line of the response if not explicitly labeled)
+        if parsed_name == "Unknown Crystal" and lines:
+             first_line = lines[0].strip()
+             # Avoid using overly long first lines as name
+             if len(first_line) < 100: parsed_name = first_line
+
+
+        # Only create crystal_details if a name was somewhat parsed or explicitly found
+        if parsed_name != "Unknown Crystal" or parsed_properties or parsed_chakras or parsed_healing:
+            crystal_details = {
+                "name": parsed_name,
+                "description": parsed_description if parsed_description != response else (lines[1] if len(lines) > 1 and parsed_name == lines[0].strip() else response),
+                "properties": parsed_properties,
+                "chakras": parsed_chakras,
+                "healing_applications": parsed_healing,
+                # Add other fields as they are reliably parsed
+            }
+
+    except Exception as e:
+        logger.error(f"Error parsing LLM response for structured data: {e}")
+        # crystal_details remains None
+
+    if crystal_details:
+        return {
+            "success": True,
+            "identification_raw": response,
+            "crystal_details": crystal_details,
+            "identification_id": identification_id,
+            "usage_remaining": _calculate_remaining_usage(user.subscription_tier),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    else:
+        return {
+            "success": True,
+            "identification": response, # Fallback to old format
+            "identification_id": identification_id,
+            "usage_remaining": _calculate_remaining_usage(user.subscription_tier),
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 @app.post("/api/guidance/personalized")
 async def get_personalized_guidance(
@@ -497,6 +561,26 @@ async def get_horoscope(
         "horoscope": horoscope_data,
         "personalized_for": user.name
     }
+
+# Placeholder for Crystal Collection Endpoints
+@app.get("/api/crystal/collection/{user_id}")
+async def get_user_collection(user_id: str, current_user: UserProfile = Depends(get_current_user)):
+    """Get user's crystal collection (Not Implemented)"""
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Cannot access another user's collection")
+    # TODO: Implement actual collection fetching logic from Firestore
+    raise HTTPException(status_code=501, detail="Collection feature not yet implemented.")
+
+@app.post("/api/crystal/save")
+async def save_crystal_to_collection(
+    # Define a Pydantic model for the request body if needed, e.g., CrystalSaveRequest
+    # crystal_data: CrystalSaveRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Save a crystal to the user's collection (Not Implemented)"""
+    # TODO: Implement actual save logic to Firestore
+    # Example body: { "identification_id": "uuid", "crystal_details": {...}, "user_notes": "..." }
+    raise HTTPException(status_code=501, detail="Save crystal feature not yet implemented.")
 
 @app.post("/api/subscription/checkout")
 async def create_subscription_checkout(

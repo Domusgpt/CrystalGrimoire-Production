@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart'; // Import Uuid package
 import '../config/backend_config.dart';
 import '../models/crystal.dart';
 import '../models/birth_chart.dart';
@@ -43,7 +44,7 @@ class BackendService {
   static Future<Map<String, dynamic>> register(String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('${BackendConfig.baseUrl.replaceAll('/api/v1', '')}/api/v1/auth/register'),
+        Uri.parse('${BackendConfig.baseUrl}/api/auth/register'),
         body: {
           'email': email,
           'password': password,
@@ -78,7 +79,7 @@ class BackendService {
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('${BackendConfig.baseUrl.replaceAll('/api/v1', '')}/api/v1/auth/login'),
+        Uri.parse('${BackendConfig.baseUrl}/api/auth/login'),
         body: {
           'email': email,
           'password': password,
@@ -189,42 +190,7 @@ class BackendService {
     String? userContext,
     String? sessionId,
   }) async {
-    try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${BackendConfig.baseUrl}/crystal/identify-anonymous'),
-      );
-      
-      // Add images
-      for (int i = 0; i < images.length; i++) {
-        final imageBytes = await images[i].readAsBytes();
-        final imageFile = http.MultipartFile.fromBytes(
-          'images',
-          imageBytes,
-          filename: images[i].name.isNotEmpty ? images[i].name : 'crystal_$i.jpg',
-        );
-        request.files.add(imageFile);
-      }
-      
-      // Add other fields
-      request.fields['description'] = userContext ?? '';
-      if (sessionId != null) {
-        request.fields['session_id'] = sessionId;
-      }
-      
-      final streamedResponse = await request.send().timeout(BackendConfig.uploadTimeout);
-      final response = await http.Response.fromStream(streamedResponse);
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return _parseBackendResponse(data);
-      } else {
-        final error = jsonDecode(response.body);
-        throw Exception(error['detail'] ?? 'Identification failed');
-      }
-    } catch (e) {
-      throw Exception('Anonymous crystal identification failed: $e');
-    }
+    throw UnsupportedError('Anonymous crystal identification is not supported by the current backend.');
   }
   
   /// Get user's crystal collection
@@ -235,7 +201,7 @@ class BackendService {
     
     try {
       final response = await http.get(
-        Uri.parse('${BackendConfig.baseUrl}${BackendConfig.collectionEndpoint}/$_userId'),
+        Uri.parse('${BackendConfig.baseUrl}${BackendConfig.collectionEndpoint}/$_userId'), // Ensure this matches requirement
         headers: _headers,
       ).timeout(BackendConfig.apiTimeout);
       
@@ -298,7 +264,7 @@ class BackendService {
     
     try {
       final response = await http.get(
-        Uri.parse('${BackendConfig.baseUrl}${BackendConfig.usageEndpoint}/$_userId'),
+        Uri.parse('${BackendConfig.baseUrl}${BackendConfig.usageEndpoint}/$_userId'), // Ensure this matches requirement
         headers: _headers,
       ).timeout(BackendConfig.apiTimeout);
       
@@ -317,50 +283,102 @@ class BackendService {
   
   /// Parse backend response into CrystalIdentification
   static CrystalIdentification _parseBackendResponse(Map<String, dynamic> data) {
-    final crystalData = data['crystal'];
-    
+    final String identificationId = data['identification_id'] as String? ?? Uuid().v4();
+    final Map<String, dynamic>? crystalDetails = data['crystal_details'] as Map<String, dynamic>?;
+    final String rawLLMResponse = data['identification_raw'] as String? ?? data['identification'] as String? ?? 'No raw identification data provided.';
+
+    String name = "Identified Crystal";
+    String description = rawLLMResponse;
+    String scientificName = '';
+    String group = 'Unknown';
+    List<String> chakras = [];
+    List<String> elements = [];
+    Map<String, dynamic> properties = {};
+    String careInstructions = '';
+    String mysticalMessage = '';
+
+    if (crystalDetails != null) {
+      name = crystalDetails['name'] as String? ?? name;
+      description = crystalDetails['description'] as String? ?? description;
+      scientificName = crystalDetails['scientific_name'] as String? ?? scientificName;
+      group = crystalDetails['group'] as String? ?? group;
+
+      if (crystalDetails['chakras'] is List) {
+        chakras = List<String>.from(crystalDetails['chakras'].map((e) => e.toString()));
+      }
+      if (crystalDetails['elements'] is List) {
+        elements = List<String>.from(crystalDetails['elements'].map((e) => e.toString()));
+      }
+      // Backend might send 'healing_applications' or a nested 'properties' map
+      if (crystalDetails['properties'] is Map) {
+        properties = Map<String, dynamic>.from(crystalDetails['properties'] as Map);
+      } else if (crystalDetails['healing_applications'] is List) {
+        properties['healing'] = List<String>.from(crystalDetails['healing_applications'].map((e) => e.toString()));
+      } else if (crystalDetails['metaphysical_properties'] is List) { // another common key
+         properties['metaphysical'] = List<String>.from(crystalDetails['metaphysical_properties'].map((e) => e.toString()));
+      }
+
+      careInstructions = crystalDetails['care_instructions'] as String? ?? careInstructions;
+      mysticalMessage = crystalDetails['spiritual_message'] as String? ?? mysticalMessage;
+
+      // If description in crystal_details is still the full raw response, try to get a shorter one.
+      if (description == rawLLMResponse && name != "Identified Crystal" && name.isNotEmpty) {
+          // This logic is a bit speculative, if the name is the first line of rawLLMResponse,
+          // and description is also rawLLMResponse, it means parsing didn't separate them.
+          // We prefer a shorter description if possible, or leave it as the full text.
+          // For now, if name is parsed, and description is still the full text, it's acceptable.
+      }
+
+    } else {
+      // Fallback if crystal_details is not present - try to get name from raw response
+      final lines = rawLLMResponse.split('\n');
+      if (lines.isNotEmpty && lines.first.length < 100) { // Avoid overly long first lines as name
+        name = lines.first.trim();
+      }
+      // Description remains rawLLMResponse
+    }
+
     final crystal = Crystal(
-      id: crystalData['id'],
-      name: crystalData['name'],
-      scientificName: crystalData['scientificName'] ?? '',
-      group: 'Unknown',
-      description: crystalData['description'] ?? '',
-      chakras: List<String>.from(crystalData['chakras'] ?? []),
-      elements: ['Earth'], // Default element
-      properties: {
-        'healing': List<String>.from(crystalData['healingProperties'] ?? []),
-        'metaphysical': List<String>.from(crystalData['metaphysicalProperties'] ?? []),
-        'hardness': crystalData['hardness'] ?? '',
-        'formation': crystalData['formation'] ?? '',
-      },
-      careInstructions: crystalData['careInstructions'] ?? '',
+      id: identificationId,
+      name: name,
+      scientificName: scientificName,
+      group: group,
+      description: description,
+      chakras: chakras,
+      elements: elements,
+      properties: properties,
+      careInstructions: careInstructions,
     );
     
     return CrystalIdentification(
-      sessionId: data['sessionId'],
+      sessionId: data['session_id'] as String? ?? '',
       crystal: crystal,
-      confidence: _parseConfidence(data['confidence']),
-      mysticalMessage: data['spiritualMessage'] ?? '',
-      fullResponse: data['fullResponse'] ?? '',
-      timestamp: DateTime.parse(data['timestamp']),
-      needsMoreInfo: data['needsMoreInfo'] ?? false,
-      suggestedAngles: List<String>.from(data['suggestedAngles'] ?? []),
-      observedFeatures: List<String>.from(data['observedFeatures'] ?? []),
+      confidence: _parseConfidence(0.7), // Default confidence
+      mysticalMessage: mysticalMessage,
+      fullResponse: rawLLMResponse,
+      timestamp: data['timestamp'] != null ? DateTime.parse(data['timestamp'] as String) : DateTime.now(),
+      needsMoreInfo: data['needs_more_info'] as bool? ?? false, // Default, not in current backend response
+      suggestedAngles: List<String>.from((data['suggested_angles'] as List<dynamic>?)?.map((e) => e.toString()) ?? []), // Default
+      observedFeatures: List<String>.from((data['observed_features'] as List<dynamic>?)?.map((e) => e.toString()) ?? []), // Default
     );
   }
   
   /// Parse backend crystal data
   static Crystal _parseBackendCrystal(Map<String, dynamic> data) {
+    // This is for parsing crystals from the collection.
+    // unified_backend.py's collection endpoint is a TODO.
+    // For now, ensure it doesn't crash if called.
+    // If data structure is unknown, make it return a Crystal object with placeholder data.
     return Crystal(
-      id: data['id'],
-      name: data['crystal_name'],
-      scientificName: '',
-      group: 'Unknown',
-      description: data['full_response'] ?? '',
-      chakras: [],
-      elements: [],
-      properties: {},
-      careInstructions: '',
+      id: data['id'] as String? ?? Uuid().v4(),
+      name: data['crystal_name'] as String? ?? 'Unknown Crystal',
+      scientificName: data['scientific_name'] as String? ?? '',
+      group: data['group'] as String? ?? 'Unknown',
+      description: data['description'] as String? ?? (data['full_response'] as String? ?? ''),
+      chakras: (data['chakras'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      elements: (data['elements'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      properties: (data['properties'] as Map<String,dynamic>?) ?? {},
+      careInstructions: data['care_instructions'] as String? ?? '',
     );
   }
   
@@ -371,13 +389,12 @@ class BackendService {
     required String customPrompt,
   }) async {
     try {
-      final uri = Uri.parse('${BackendConfig.baseUrl}/spiritual/guidance');
+      final uri = Uri.parse('${BackendConfig.baseUrl}/api/guidance/personalized'); // Updated URL
       final request = http.MultipartRequest('POST', uri);
       
       // Add headers
-      BackendConfig.headers.forEach((key, value) {
-        request.headers[key] = value;
-      });
+      // Use _headers which includes auth token
+      request.headers.addAll(_headers);
       
       // Add form fields
       request.fields['guidance_type'] = guidanceType;
