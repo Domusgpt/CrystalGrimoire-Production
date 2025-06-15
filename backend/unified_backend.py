@@ -22,6 +22,7 @@ from enum import Enum
 import hashlib
 import base64
 import uuid # Import uuid
+import asyncio # Import asyncio
 
 # Configure logging
 logging.basicConfig(
@@ -107,6 +108,20 @@ class PersonalizedGuidanceRequest(BaseModel):
 class HoroscopeRequest(BaseModel):
     zodiac_sign: str
     horoscope_type: str = "daily"  # daily, weekly, monthly
+
+class SaveCrystalRequest(BaseModel):
+    identification_id: str
+    identified_at: datetime # Assuming this comes as a valid ISO datetime string and Pydantic handles parsing
+    name: str
+    variant_or_specific_name: Optional[str] = None
+    main_color: Optional[str] = None
+    brief_description: Optional[str] = None
+    crystal_details: Dict[str, Any] # This would be the 'crystal_details' object from identify response
+    raw_llm_response: str
+    user_context_at_identification: Optional[Dict[str, Any]] = None # e.g., mood, intent
+    source: Optional[str] = "llm_identification" # e.g., 'manual_entry', 'legacy_import'
+    api_version: Optional[str] = Field(default_factory=lambda: app.version) # Default to current app version
+    user_notes: Optional[str] = None # User's personal notes about this crystal
 
 # ===== SERVICES =====
 class FirebaseService:
@@ -562,25 +577,75 @@ async def get_horoscope(
         "personalized_for": user.name
     }
 
-# Placeholder for Crystal Collection Endpoints
+# Crystal Collection Endpoints
 @app.get("/api/crystal/collection/{user_id}")
-async def get_user_collection(user_id: str, current_user: UserProfile = Depends(get_current_user)):
-    """Get user's crystal collection (Not Implemented)"""
+async def get_user_crystal_collection(user_id: str, current_user: UserProfile = Depends(get_current_user)):
+    """Get user's crystal collection"""
     if user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Cannot access another user's collection")
-    # TODO: Implement actual collection fetching logic from Firestore
-    raise HTTPException(status_code=501, detail="Collection feature not yet implemented.")
+        raise HTTPException(status_code=403, detail="Not authorized to access this collection")
+
+    if not firebase_service.db:
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    try:
+        collection_ref = firebase_service.db.collection('users').document(user_id).collection('saved_crystals')
+
+        # Synchronous function to fetch documents
+        def _get_docs_sync():
+            docs_stream = collection_ref.stream() # stream() returns an iterator
+            # Process documents, converting Firestore Timestamps in crystal_details if necessary
+            # For now, assuming Pydantic or FastAPI's default JSON encoder handles datetime objects from .to_dict()
+            return [doc.to_dict() for doc in docs_stream]
+
+        saved_crystals_data = await asyncio.to_thread(_get_docs_sync)
+
+        logger.info(f"Retrieved {len(saved_crystals_data)} crystals for user {user_id}")
+        return {
+            "success": True,
+            "user_id": user_id,
+            "collection": saved_crystals_data,
+            "count": len(saved_crystals_data)
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving collection for user {user_id}: {e}")
+        # Consider more specific error codes if possible, e.g., 404 if user doc not found,
+        # but generic 500 is okay for unexpected issues.
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve crystal collection: {str(e)}")
 
 @app.post("/api/crystal/save")
-async def save_crystal_to_collection(
-    # Define a Pydantic model for the request body if needed, e.g., CrystalSaveRequest
-    # crystal_data: CrystalSaveRequest,
-    current_user: UserProfile = Depends(get_current_user)
-):
-    """Save a crystal to the user's collection (Not Implemented)"""
-    # TODO: Implement actual save logic to Firestore
-    # Example body: { "identification_id": "uuid", "crystal_details": {...}, "user_notes": "..." }
-    raise HTTPException(status_code=501, detail="Save crystal feature not yet implemented.")
+async def save_crystal_to_collection(request: SaveCrystalRequest, current_user: UserProfile = Depends(get_current_user)):
+    """Save a crystal to the user's collection"""
+    user_id = current_user.id
+
+    if not firebase_service.db:
+        raise HTTPException(status_code=503, detail="Database service not available.")
+
+    try:
+        data_to_save = request.dict() # Pydantic model to dict
+        data_to_save['user_id'] = user_id
+        data_to_save['saved_at'] = datetime.utcnow()
+
+        # Ensure complex objects are suitable for Firestore (Pydantic usually handles this well)
+        # For example, datetime objects are fine. Enums should be stored as their value.
+        # If 'crystal_details' or 'user_context_at_identification' contain custom objects
+        # not directly serializable by Firestore, they might need preprocessing.
+        # However, standard dicts, lists, strings, numbers, datetimes are fine.
+
+        crystal_doc_ref = firebase_service.db.collection('users').document(user_id).collection('saved_crystals').document(request.identification_id)
+
+        # Firestore 'set' is synchronous, run in thread pool for async context
+        # For a single operation, direct call might be acceptable, but this is safer:
+        await asyncio.to_thread(crystal_doc_ref.set, data_to_save)
+
+        logger.info(f"Crystal {request.identification_id} saved for user {user_id}")
+        return {
+            "success": True,
+            "message": "Crystal saved to collection",
+            "saved_crystal_id": request.identification_id
+        }
+    except Exception as e:
+        logger.error(f"Error saving crystal {request.identification_id} for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save crystal: {str(e)}")
 
 @app.post("/api/subscription/checkout")
 async def create_subscription_checkout(
@@ -630,4 +695,4 @@ def _calculate_remaining_usage(tier: SubscriptionTier) -> int:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=7888)

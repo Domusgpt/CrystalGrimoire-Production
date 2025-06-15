@@ -209,8 +209,14 @@ class BackendService {
         final data = jsonDecode(response.body);
         final crystals = <Crystal>[];
         
-        for (final crystalData in data['crystals']) {
-          crystals.add(_parseBackendCrystal(crystalData));
+        // Backend returns {"success": true, ..., "collection": saved_crystals_data, ...}
+        // So, we need to iterate over data['collection']
+        if (data['collection'] is List) {
+          for (final crystalData in data['collection'] as List<dynamic>) {
+            if (crystalData is Map<String, dynamic>) {
+              crystals.add(_parseBackendCrystal(crystalData));
+            }
+          }
         }
         
         return crystals;
@@ -226,19 +232,21 @@ class BackendService {
   }
   
   /// Save crystal to user collection
-  static Future<bool> saveCrystal(String crystalId, {String notes = ''}) async {
+  static Future<bool> saveCrystal(Map<String, dynamic> crystalDataToSave) async {
     if (!isAuthenticated) {
       throw Exception('Authentication required');
     }
     
+    final Map<String, String> requestHeaders = {
+      ..._headers, // Existing headers (like Auth)
+      'Content-Type': 'application/json; charset=UTF-8', // Explicitly set Content-Type
+    };
+
     try {
       final response = await http.post(
         Uri.parse('${BackendConfig.baseUrl}${BackendConfig.saveEndpoint}'),
-        headers: _headers,
-        body: {
-          'crystal_id': crystalId,
-          'notes': notes,
-        },
+        headers: requestHeaders,
+        body: jsonEncode(crystalDataToSave),
       ).timeout(BackendConfig.apiTimeout);
       
       if (response.statusCode == 200) {
@@ -365,20 +373,71 @@ class BackendService {
   
   /// Parse backend crystal data
   static Crystal _parseBackendCrystal(Map<String, dynamic> data) {
-    // This is for parsing crystals from the collection.
-    // unified_backend.py's collection endpoint is a TODO.
-    // For now, ensure it doesn't crash if called.
-    // If data structure is unknown, make it return a Crystal object with placeholder data.
+    final Map<String, dynamic> crystalDetailsMap = data['crystal_details'] as Map<String, dynamic>? ?? {};
+    final Map<String, dynamic> astroDetails = crystalDetailsMap['astrological_associations'] as Map<String, dynamic>? ?? {};
+    final Map<String, dynamic> physicalChars = crystalDetailsMap['physical_characteristics'] as Map<String, dynamic>? ?? {};
+
+    // Prepare the generic 'properties' map from crystal_details, excluding fields mapped directly
+    Map<String, dynamic> generalProperties = Map.from(crystalDetailsMap);
+    generalProperties.remove('astrological_associations');
+    generalProperties.remove('physical_characteristics');
+    generalProperties.remove('chakra_associations');
+    generalProperties.remove('elemental_associations'); // if it was at top level of crystal_details
+    generalProperties.remove('healing_applications');
+    generalProperties.remove('metaphysical_properties');
+    generalProperties.remove('numerology_connection');
+    generalProperties.remove('color_description');
+    generalProperties.remove('crystal_system'); // if 'crystal_system' was a direct key in crystal_details
+    generalProperties.remove('group');
+    generalProperties.remove('description'); // if the detailed one is in crystal_details
+    generalProperties.remove('care_instructions');
+    generalProperties.remove('spiritual_message_from_llm');
+    // Remove other keys that are now direct fields in the Crystal model
+
     return Crystal(
-      id: data['id'] as String? ?? Uuid().v4(),
-      name: data['crystal_name'] as String? ?? 'Unknown Crystal',
-      scientificName: data['scientific_name'] as String? ?? '',
-      group: data['group'] as String? ?? 'Unknown',
-      description: data['description'] as String? ?? (data['full_response'] as String? ?? ''),
-      chakras: (data['chakras'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      elements: (data['elements'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      properties: (data['properties'] as Map<String,dynamic>?) ?? {},
-      careInstructions: data['care_instructions'] as String? ?? '',
+      id: data['identification_id'] as String? ?? Uuid().v4(),
+      name: data['name'] as String? ?? 'Unknown Crystal',
+
+      // Prioritize top-level brief_description, then crystal_details.description, then full raw response
+      description: data['brief_description'] as String?
+          ?? crystalDetailsMap['description'] as String?
+          ?? data['raw_llm_response'] as String? ?? '',
+
+      briefDescription: data['brief_description'] as String?,
+      variantOrSpecificName: data['variant_or_specific_name'] as String?,
+      mainColor: data['main_color'] as String?,
+
+      identifiedAt: data['identified_at'] != null ? DateTime.tryParse(data['identified_at'] as String) : null,
+      savedAt: data['saved_at'] != null ? DateTime.tryParse(data['saved_at'] as String) : null,
+
+      scientificName: physicalChars['crystal_system'] as String? ?? '', // Example, might also be data['scientific_name']
+      group: crystalDetailsMap['group'] as String? ?? 'Unknown',
+      chakras: (crystalDetailsMap['chakra_associations'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      elements: (astroDetails['elemental_associations'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+
+      zodiacSigns: (astroDetails['zodiac_signs'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      planetaryInfluences: (astroDetails['planetary_influences'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      numerologyConnection: crystalDetailsMap['numerology_connection'] as String?,
+      healingApplications: (crystalDetailsMap['healing_applications'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      crystalSystem: physicalChars['crystal_system'] as String?, // Or a more general scientificName field
+
+      spiritualMessage: crystalDetailsMap['spiritual_message_from_llm'] as String?,
+
+      careInstructions: crystalDetailsMap['care_instructions'] as String? ?? '',
+
+      // Populate existing general fields if not covered by new specific ones
+      metaphysicalProperties: (crystalDetailsMap['metaphysical_properties'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      // healingProperties: (crystalDetailsMap['healing_applications'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [], // Covered by healingApplications
+      colorDescription: physicalChars['color_description'] as String? ?? '', // Example
+      hardness: physicalChars['hardness'] as String? ?? '', // Example
+      formation: physicalChars['formation'] as String? ?? '', // Example
+
+      properties: generalProperties, // Store remaining/other details from crystal_details
+      crystalDetailsRaw: crystalDetailsMap, // Store the whole crystal_details map
+
+      userNotes: data['user_notes'] as String?,
+      // imageUrls: List<String>.from(data['image_urls'] ?? []), // If stored
+      // confidence: data['confidence'] != null ? ConfidenceLevel.values.byName(data['confidence']) : null, // If stored
     );
   }
   
